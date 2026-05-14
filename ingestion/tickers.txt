@@ -1,8 +1,60 @@
+# Top 50 S&P 500 stocks by market cap weight + SPY benchmark
+# Technology
 AAPL
 MSFT
+NVDA
+AVGO
+AMD
+ADBE
+CRM
+INTU
+QCOM
+TXN
+CSCO
+# Communication & Media
 GOOGL
+META
+NFLX
+VZ
+# Consumer
 AMZN
 TSLA
-NVDA
-META
+WMT
+COST
+HD
+MCD
+KO
+PEP
+PG
+# Healthcare
+LLY
+UNH
+JNJ
+ABBV
+MRK
+ABT
+TMO
+AMGN
+DHR
+ISRG
+# Financials
+JPM
+BAC
+V
+MA
+GS
+SPGI
+# Energy
+XOM
+CVX
+# Industrials
+CAT
+RTX
+LIN
+# Conglomerates
+BRK-B
+ACN
+NOW
+NEE
+# Market Benchmark
 SPY

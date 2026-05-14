@@ -18,8 +18,12 @@ PYTHON = sys.executable
 ROOT   = Path(__file__).parent
 
 # Track which steps were actually run this session
-if "steps_run" not in st.session_state:
-    st.session_state.steps_run = set()   # values: 1, 2, 3, 4
+if "steps_run"      not in st.session_state:
+    st.session_state.steps_run      = set()  # values: 1, 2, 3, 4
+if "running_step"   not in st.session_state:
+    st.session_state.running_step   = None   # which step tile shows 🔄
+if "pipeline_stage" not in st.session_state:
+    st.session_state.pipeline_stage = 0      # 0=idle, 1-4=auto-running that step
 
 # ── Page config ───────────────────────────────────────────────────────────────
 
@@ -58,9 +62,16 @@ st.markdown("""
     color: #6c7086;
     line-height: 1.5;
 }
-.status-done  { color: #a6e3a1; font-size: 13px; font-weight: 600; }
-.status-ready { color: #89b4fa; font-size: 13px; }
-.status-wait  { color: #6c7086; font-size: 13px; }
+.status-done    { color: #a6e3a1; font-size: 13px; font-weight: 600; }
+.status-ready   { color: #89b4fa; font-size: 13px; }
+.status-wait    { color: #6c7086; font-size: 13px; }
+.status-running { color: #fab387; font-size: 13px; font-weight: 600; }
+@keyframes pulse-border {
+    0%   { border-color: #fab387; box-shadow: 0 0 0 0 rgba(250,179,135,0.5); }
+    70%  { border-color: #fab387; box-shadow: 0 0 0 8px rgba(250,179,135,0); }
+    100% { border-color: #fab387; box-shadow: 0 0 0 0 rgba(250,179,135,0); }
+}
+.card-running { animation: pulse-border 1.2s infinite; border-color: #fab387 !important; }
 .pred-card {
     background: #1e1e2e;
     border-radius: 12px;
@@ -78,7 +89,12 @@ st.markdown("""
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-TICKERS = ["AAPL", "MSFT", "GOOGL", "NVDA", "SPY"]
+def load_tickers_list() -> list[str]:
+    path = ROOT / "ingestion" / "tickers.txt"
+    return [t.strip().upper() for t in path.read_text().splitlines()
+            if t.strip() and not t.strip().startswith("#")]
+
+TICKERS = load_tickers_list()
 
 def raw_data_exists() -> bool:
     return any((ROOT / "data" / "raw").glob("*/*.parquet") if (ROOT / "data" / "raw").exists() else [])
@@ -142,66 +158,59 @@ st.divider()
 
 st.markdown("### Pipeline Steps")
 
-col1, col2, col3, col4 = st.columns(4)
-
 STEPS = [
-    {
-        "col":   col1,
-        "num":   "Step 1",
-        "title": "Data Ingestion",
-        "desc":  "Fetch 2 years of OHLCV data from Yahoo Finance and save as partitioned Parquet.",
-        "cmd":   ["-m", "ingestion.fetch_stocks", "--days", "730"],
-        "ready": lambda: True,
-        "done":  raw_data_exists,
-    },
-    {
-        "col":   col2,
-        "num":   "Step 2",
-        "title": "Feature Engineering",
-        "desc":  "Compute 25 technical indicators: MA, EMA, MACD, RSI, Bollinger Bands, lag features.",
-        "cmd":   ["-m", "pipeline.features"],
-        "ready": raw_data_exists,
-        "done":  processed_data_exists,
-    },
-    {
-        "col":   col3,
-        "num":   "Step 3",
-        "title": "Train Models",
-        "desc":  "Train XGBoost on each ticker using a time-series split. Saves model + metadata.",
-        "cmd":   ["-m", "pipeline.features"],   # placeholder; handled specially below
-        "ready": processed_data_exists,
-        "done":  models_exist,
-    },
-    {
-        "col":   col4,
-        "num":   "Step 4",
-        "title": "Predictions",
-        "desc":  "Load trained models and predict next trading day's close price for all tickers.",
-        "cmd":   [],
-        "ready": models_exist,
-        "done":  models_exist,
-    },
+    {"num": 1, "title": "Data Ingestion",      "icon": "🌐",
+     "desc": "Fetch 2 years of OHLCV data from Yahoo Finance and save as partitioned Parquet."},
+    {"num": 2, "title": "Feature Engineering", "icon": "⚙️",
+     "desc": "Compute 25 technical indicators: MA, EMA, MACD, RSI, Bollinger Bands, lag features."},
+    {"num": 3, "title": "Train Models",        "icon": "🤖",
+     "desc": "Train XGBoost on each ticker using a strict time-series split. Saves model + metadata."},
+    {"num": 4, "title": "Predictions",         "icon": "🎯",
+     "desc": "Load trained models and predict next trading day's close price for all tickers."},
 ]
 
-for step in STEPS:
-    with step["col"]:
-        step_num = int(step["num"].split()[1])
-        ran_this_session = step_num in st.session_state.steps_run
-        is_ready = step["ready"]()
+# 7-column layout: tile, arrow, tile, arrow, tile, arrow, tile
+grid = st.columns([10, 1, 10, 1, 10, 1, 10])
+tile_cols   = [grid[0], grid[2], grid[4], grid[6]]
+arrow_cols  = [grid[1], grid[3], grid[5]]
 
-        if ran_this_session:
-            status  = "✅ Complete"
-            css_cls = "status-done"
-        elif not is_ready:
-            status  = "⏳ Waiting for previous step"
-            css_cls = "status-wait"
-        else:
-            status  = "🔵 Ready to run"
-            css_cls = "status-ready"
+for arrow_col in arrow_cols:
+    with arrow_col:
+        st.markdown("<div style='text-align:center; font-size:28px; padding-top:48px; color:#45475a;'>→</div>",
+                    unsafe_allow_html=True)
 
+for step, col in zip(STEPS, tile_cols):
+    n        = step["num"]
+    done     = n in st.session_state.steps_run
+    running  = st.session_state.running_step == n
+    unlocked = (n == 1) or ((n - 1) in st.session_state.steps_run)
+
+    if running:
+        border   = "#fab387"
+        status   = "🔄 Running..."
+        css_cls  = "status-running"
+        extra_cls = "card-running"
+    elif done:
+        border   = "#a6e3a1"
+        status   = "✅ Complete"
+        css_cls  = "status-done"
+        extra_cls = ""
+    elif unlocked:
+        border   = "#89b4fa"
+        status   = "🔵 Ready to run"
+        css_cls  = "status-ready"
+        extra_cls = ""
+    else:
+        border   = "#313244"
+        status   = "🔒 Locked — complete previous step first"
+        css_cls  = "status-wait"
+        extra_cls = ""
+
+    with col:
         st.markdown(f"""
-        <div class="step-card">
-          <div class="step-number">{step['num']}</div>
+        <div class="step-card {extra_cls}" style="border-color:{border};">
+          <div style="font-size:28px">{step['icon']}</div>
+          <div class="step-number">STEP {n}</div>
           <div class="step-title">{step['title']}</div>
           <div class="step-desc">{step['desc']}</div>
           <br/>
@@ -209,63 +218,89 @@ for step in STEPS:
         </div>
         """, unsafe_allow_html=True)
 
-# ── Run buttons ───────────────────────────────────────────────────────────────
+# ── Single start button — pipeline auto-runs all 4 steps in sequence ──────────
 
-b1, b2, b3, b4 = st.columns(4)
+def start_pipeline():
+    st.session_state.pipeline_stage = 1
+    st.session_state.running_step   = 1
+    st.session_state.steps_run      = set()   # reset so tiles go back to fresh state
 
+b1, _, b2, _, b3, _, b4 = st.columns([10, 1, 10, 1, 10, 1, 10])
 with b1:
-    run1 = st.button("▶ Run Ingestion",         use_container_width=True, type="primary")
+    st.button("▶ Start Pipeline", use_container_width=True, type="primary",
+              on_click=start_pipeline)
 with b2:
-    run2 = st.button("▶ Run Feature Engineering", use_container_width=True,
-                     type="primary", disabled=not raw_data_exists())
+    st.button("⚙️ Feature Eng.", use_container_width=True, type="secondary", disabled=True)
 with b3:
-    run3 = st.button("▶ Train All Models",       use_container_width=True,
-                     type="primary", disabled=not processed_data_exists())
+    st.button("🤖 Train Models", use_container_width=True, type="secondary", disabled=True)
 with b4:
-    run4 = st.button("🔄 Refresh Predictions",   use_container_width=True,
-                     type="secondary", disabled=not models_exist())
+    st.button("🎯 Predictions",  use_container_width=True, type="secondary", disabled=True)
 
-# ── Step execution ────────────────────────────────────────────────────────────
+st.caption("Click **Start Pipeline** — Steps 2, 3 and 4 run automatically in sequence.")
 
-if run1:
-    st.markdown("#### Step 1 — Ingestion Log")
-    log = st.empty()
-    with st.spinner("Fetching data from Yahoo Finance..."):
-        ok = run_step(["-m", "ingestion.fetch_stocks", "--days", "730"], log)
-    if ok:
-        st.session_state.steps_run.add(1)
-        st.success("Ingestion complete!")
-    else:
-        st.error("Ingestion failed. Check log above.")
+# ── Log area: fixed position right below the buttons ─────────────────────────
+log_container = st.container()
 
-if run2:
-    st.markdown("#### Step 2 — Feature Engineering Log")
-    log = st.empty()
-    with st.spinner("Computing technical indicators..."):
-        ok = run_step(["-m", "pipeline.features"], log)
-    if ok:
-        st.session_state.steps_run.add(2)
-        st.success("Features computed!")
-    else:
-        st.error("Feature engineering failed.")
+# ── Auto-pipeline executor ────────────────────────────────────────────────────
+stage = st.session_state.pipeline_stage
 
-if run3:
-    st.markdown("#### Step 3 — Training Log")
-    all_ok = True
-    for ticker in TICKERS:
-        st.markdown(f"**Training {ticker}...**")
+if stage == 1:
+    with log_container:
+        st.markdown("#### 🔄 Step 1 — Fetching stock data...")
         log = st.empty()
-        ok = run_step(["-m", "models.train", "--ticker", ticker], log)
-        if not ok:
-            all_ok = False
-    if all_ok:
-        st.session_state.steps_run.add(3)
-        st.success("All models trained!")
-    else:
-        st.error("Some models failed.")
+        ok  = run_step(["-m", "ingestion.fetch_stocks", "--days", "730"], log)
+        if ok:
+            st.session_state.steps_run.add(1)
+            st.session_state.running_step   = 2
+            st.session_state.pipeline_stage = 2
+            st.success("✅ Step 1 done — moving to Feature Engineering...")
+        else:
+            st.error("❌ Ingestion failed — pipeline stopped.")
+            st.session_state.pipeline_stage = 0
+            st.session_state.running_step   = None
+        st.rerun()
 
-if run4:
+elif stage == 2:
+    with log_container:
+        st.markdown("#### 🔄 Step 2 — Computing technical indicators...")
+        log = st.empty()
+        ok  = run_step(["-m", "pipeline.features"], log)
+        if ok:
+            st.session_state.steps_run.add(2)
+            st.session_state.running_step   = 3
+            st.session_state.pipeline_stage = 3
+            st.success("✅ Step 2 done — moving to Model Training...")
+        else:
+            st.error("❌ Feature engineering failed — pipeline stopped.")
+            st.session_state.pipeline_stage = 0
+            st.session_state.running_step   = None
+        st.rerun()
+
+elif stage == 3:
+    with log_container:
+        st.markdown("#### 🔄 Step 3 — Training models for all tickers...")
+        all_ok = True
+        for ticker in TICKERS:
+            st.markdown(f"**Training {ticker}...**")
+            log = st.empty()
+            ok  = run_step(["-m", "models.train", "--ticker", ticker], log)
+            if not ok:
+                all_ok = False
+        if all_ok:
+            st.session_state.steps_run.add(3)
+            st.session_state.running_step   = 4
+            st.session_state.pipeline_stage = 4
+            st.success("✅ Step 3 done — loading predictions...")
+        else:
+            st.error("❌ Some models failed — pipeline stopped.")
+            st.session_state.pipeline_stage = 0
+            st.session_state.running_step   = None
+        st.rerun()
+
+elif stage == 4:
     st.session_state.steps_run.add(4)
+    st.session_state.running_step   = None
+    st.session_state.pipeline_stage = 0
     st.rerun()
 
 st.divider()
@@ -279,23 +314,65 @@ predictions = load_predictions()
 if not predictions:
     st.info("No predictions yet. Complete Steps 1–3 above, then click 'Refresh Predictions'.")
 else:
-    cols = st.columns(len(predictions))
-    for col, pred in zip(cols, predictions):
-        arrow    = "▲" if pred["direction"] == "UP" else "▼"
-        css_dir  = "pred-up" if pred["direction"] == "UP" else "pred-down"
-        chg_sign = "+" if pred["change_pct"] > 0 else ""
-        with col:
-            st.markdown(f"""
-            <div class="pred-card">
-              <div class="pred-ticker">{pred['ticker']}</div>
-              <div class="pred-meta">Last close: ${pred['last_close']:,.2f}</div>
-              <div class="pred-price {css_dir}">{arrow} ${pred['predicted_close']:,.2f}</div>
-              <div class="pred-meta">{chg_sign}{pred['change_pct']:.2f}% predicted change</div>
-              <br/>
-              <div class="pred-meta">MAE: ${pred['test_mae']:.2f} &nbsp;|&nbsp; MAPE: {pred['test_mape']:.1f}%</div>
-              <div class="pred-meta">Trained on data through {pred['train_end']}</div>
-            </div>
-            """, unsafe_allow_html=True)
+    # ── Summary bar ───────────────────────────────────────────────────────────
+    n_up   = sum(1 for p in predictions if p["direction"] == "UP")
+    n_down = len(predictions) - n_up
+    sm1, sm2, sm3, sm4 = st.columns(4)
+    sm1.metric("Total Stocks", len(predictions))
+    sm2.metric("Predicted UP ▲",   n_up,   delta=f"{n_up/len(predictions)*100:.0f}% bullish")
+    sm3.metric("Predicted DOWN ▼", n_down, delta=f"{n_down/len(predictions)*100:.0f}% bearish", delta_color="inverse")
+    sm4.metric("Avg MAPE", f"{sum(p['test_mape'] for p in predictions)/len(predictions):.1f}%",
+               help="Average model accuracy across all tickers")
+
+    st.markdown("<br/>", unsafe_allow_html=True)
+
+    # ── Filter controls ────────────────────────────────────────────────────────
+    fc1, fc2, fc3 = st.columns([2, 1, 1])
+    with fc1:
+        search = st.text_input("🔍 Search ticker", placeholder="e.g. AAPL, NVDA").upper().strip()
+    with fc2:
+        direction_filter = st.selectbox("Direction", ["All", "UP ▲", "DOWN ▼"])
+    with fc3:
+        sort_by = st.selectbox("Sort by", ["Ticker A–Z", "Biggest gain", "Biggest drop", "Lowest MAPE"])
+
+    filtered = predictions
+    if search:
+        filtered = [p for p in filtered if search in p["ticker"]]
+    if direction_filter == "UP ▲":
+        filtered = [p for p in filtered if p["direction"] == "UP"]
+    elif direction_filter == "DOWN ▼":
+        filtered = [p for p in filtered if p["direction"] == "DOWN"]
+
+    if sort_by == "Ticker A–Z":
+        filtered = sorted(filtered, key=lambda p: p["ticker"])
+    elif sort_by == "Biggest gain":
+        filtered = sorted(filtered, key=lambda p: p["change_pct"], reverse=True)
+    elif sort_by == "Biggest drop":
+        filtered = sorted(filtered, key=lambda p: p["change_pct"])
+    elif sort_by == "Lowest MAPE":
+        filtered = sorted(filtered, key=lambda p: p["test_mape"])
+
+    st.caption(f"Showing {len(filtered)} of {len(predictions)} tickers")
+
+    # ── Card grid (5 per row) ─────────────────────────────────────────────────
+    COLS_PER_ROW = 5
+    for row_start in range(0, len(filtered), COLS_PER_ROW):
+        row_preds = filtered[row_start : row_start + COLS_PER_ROW]
+        cols = st.columns(COLS_PER_ROW)
+        for col, pred in zip(cols, row_preds):
+            arrow    = "▲" if pred["direction"] == "UP" else "▼"
+            css_dir  = "pred-up" if pred["direction"] == "UP" else "pred-down"
+            chg_sign = "+" if pred["change_pct"] > 0 else ""
+            with col:
+                st.markdown(f"""
+                <div class="pred-card">
+                  <div class="pred-ticker">{pred['ticker']}</div>
+                  <div class="pred-meta">Last: ${pred['last_close']:,.2f}</div>
+                  <div class="pred-price {css_dir}">{arrow} ${pred['predicted_close']:,.2f}</div>
+                  <div class="pred-meta">{chg_sign}{pred['change_pct']:.2f}%</div>
+                  <div class="pred-meta" style="margin-top:6px">MAPE {pred['test_mape']:.1f}%</div>
+                </div>
+                """, unsafe_allow_html=True)
 
 st.divider()
 

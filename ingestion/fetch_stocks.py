@@ -39,7 +39,8 @@ RAW_DATA_DIR = Path("data/raw")
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def load_tickers(path: Path = Path("ingestion/tickers.txt")) -> list[str]:
-    return [t.strip().upper() for t in path.read_text().splitlines() if t.strip()]
+    return [t.strip().upper() for t in path.read_text().splitlines()
+            if t.strip() and not t.strip().startswith("#")]
 
 
 def partition_path(ticker: str, year: int, month: int) -> Path:
