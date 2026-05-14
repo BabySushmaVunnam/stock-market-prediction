@@ -1,5 +1,7 @@
 # Stock Market Prediction Pipeline
 
+https://stock-market-prediction-bsv.streamlit.app/
+
 A production-grade **data engineering + ML pipeline** that ingests raw stock market data, transforms it into predictive features, trains a forecasting model, and serves predictions via a REST API.
 
 > The goal is not to beat the market — it's to demonstrate end-to-end data engineering: ingestion, transformation, orchestration, modeling, and serving.
