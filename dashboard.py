@@ -150,8 +150,12 @@ with col_h1:
     st.markdown("Run each step in order, then explore live predictions and charts below.")
 with col_h2:
     st.markdown("<br/>", unsafe_allow_html=True)
-    st.link_button("🔗 Open API Docs (Swagger)", "http://localhost:8000/docs", use_container_width=True)
-    st.link_button("⚡ Raw API — /predict/all",  "http://localhost:8000/predict/all", use_container_width=True)
+    st.link_button("📂 View Source on GitHub",
+                   "https://github.com/BabySushmaVunnam/stock-market-prediction",
+                   use_container_width=True)
+    st.link_button("📄 API Reference (README)",
+                   "https://github.com/BabySushmaVunnam/stock-market-prediction#phase-5--serving",
+                   use_container_width=True)
 st.divider()
 
 # ── Pipeline tiles ────────────────────────────────────────────────────────────
