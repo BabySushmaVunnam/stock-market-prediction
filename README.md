@@ -198,14 +198,15 @@ docker-compose up --build
 ## Roadmap
 
 - [x] Project structure and README
-- [ ] Phase 1: Data ingestion script
-- [ ] Phase 2: Feature engineering pipeline
+- [x] Phase 1: Data ingestion script (yfinance → partitioned Parquet)
+- [x] Phase 2: Feature engineering pipeline (25 indicators: MA, EMA, MACD, RSI, Bollinger Bands)
+- [x] Phase 2: Data quality validation (6 checks per ticker)
 - [ ] Phase 3: Airflow DAG setup
-- [ ] Phase 4: XGBoost baseline model
+- [x] Phase 4: XGBoost baseline model (MAE ~$6–21 across tickers)
 - [ ] Phase 4: LSTM model
-- [ ] Phase 5: FastAPI serving layer
+- [x] Phase 5: FastAPI serving layer (`/predict`, `/predict/all`, `/health`)
 - [ ] Docker + Docker Compose setup
-- [ ] GitHub Actions CI/CD
+- [x] GitHub Actions CI/CD
 - [ ] Data quality tests with Great Expectations
 - [ ] Streamlit dashboard (optional)
 
@@ -228,3 +229,4 @@ docker-compose up --build
 
 **Sushma Vunnam** — Data Engineer  
 [Portfolio](https://babysushmavunnam.github.io) | [GitHub](https://github.com/BabySushmaVunnam) | [LinkedIn](https://linkedin.com/in/sushma-vunnam)
+in on
