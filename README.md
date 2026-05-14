@@ -135,9 +135,41 @@ Evaluation metrics: MAE, RMSE, MAPE, directional accuracy
 
 ### Phase 5 — Serving
 FastAPI REST endpoint:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /health` | Liveness check + list of available models |
+| `GET /tickers` | All tickers with trained models |
+| `GET /predict?ticker=AAPL` | Next-day close prediction for a single ticker |
+| `GET /predict/all` | Predictions for all 50 tickers at once |
+
+**Run the API locally:**
+```bash
+uvicorn serving.main:app --reload
 ```
-GET /predict?ticker=AAPL&model=xgboost
-→ { "ticker": "AAPL", "predicted_close": 189.45, "confidence": 0.72, "date": "2026-05-01" }
+
+**Interactive API docs (Swagger UI):**
+```
+http://localhost:8000/docs
+```
+
+**Example request & response:**
+```bash
+curl "http://localhost:8000/predict?ticker=AAPL"
+```
+```json
+{
+  "ticker": "AAPL",
+  "model": "xgboost",
+  "last_date": "2026-05-13",
+  "last_close": 294.80,
+  "predicted_close": 278.25,
+  "change_pct": -5.61,
+  "direction": "DOWN",
+  "train_end": "2025-09-30",
+  "test_mae": 7.12,
+  "test_mape": 2.4
+}
 ```
 
 ---
@@ -208,7 +240,7 @@ docker-compose up --build
 - [ ] Docker + Docker Compose setup
 - [x] GitHub Actions CI/CD
 - [ ] Data quality tests with Great Expectations
-- [ ] Streamlit dashboard (optional)
+- [x] Streamlit dashboard (pipeline orchestration UI + live charts)
 
 ---
 
